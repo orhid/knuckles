@@ -3,7 +3,10 @@ This file is from the wavebender library developed by Zachary Denton
 https://github.com/zacharydenton/wavebender
 """
 
-"""Stuff to parse WAVE files.
+# probably can delete the reading section
+
+"""
+Stuff to parse WAVE files.
 
 Usage.
 
@@ -11,69 +14,49 @@ Reading WAVE files:
       f = wave.open(file, 'r')
 where file is either the name of a file or an open file pointer.
 The open file pointer must have methods read(), seek(), and close().
-When the setpos() and rewind() methods are not used, the seek()
-method is not  necessary.
+When the setpos() and rewind() methods are not used, the seek() method is not necessary.
 
 This returns an instance of a class with the following public methods:
-      getnchannels()  -- returns number of audio channels (1 for
-                         mono, 2 for stereo)
+      getnchannels()  -- returns number of audio channels (1 for  mono, 2 for stereo)
       getsampwidth()  -- returns sample width in bytes
       getframerate()  -- returns sampling frequency
       getnframes()    -- returns number of audio frames
       getcomptype()   -- returns compression type ('NONE' for linear samples)
-      getcompname()   -- returns human-readable version of
-                         compression type ('not compressed' linear samples)
-      getparams()     -- returns a tuple consisting of all of the
-                         above in the above order
-      getmarkers()    -- returns None (for compatibility with the
-                         aifc module)
-      getmark(id)     -- raises an error since the mark does not
-                         exist (for compatibility with the aifc module)
+      getcompname()   -- returns human-readable version of compression type ('not compressed' linear samples)
+      getparams()     -- returns a tuple consisting of all of the above in the above order
+      getmarkers()    -- returns None (for compatibility with the aifc module)
+      getmark(id)     -- raises an error since the mark does not exist (for compatibility with the aifc module)
       readframes(n)   -- returns at most n frames of audio
       rewind()        -- rewind to the beginning of the audio stream
       setpos(pos)     -- seek to the specified position
       tell()          -- return the current position
       close()         -- close the instance (make it unusable)
-The position returned by tell() and the position given to setpos()
-are compatible and have nothing to do with the actual position in the
-file.
-The close() method is called automatically when the class instance
-is destroyed.
+
+The position returned by tell() and the position given to setpos() are compatible and have nothing to do with the actual position in the file.
+The close() method is called automatically when the class instance is destroyed.
 
 Writing WAVE files:
       f = wave.open(file, 'w')
 where file is either the name of a file or an open file pointer.
-The open file pointer must have methods write(), tell(), seek(), and
-close().
+The open file pointer must have methods write(), tell(), seek(), and close().
 
 This returns an instance of a class with the following public methods:
-      setnchannels(n) -- set the number of channels
-      setsampwidth(n) -- set the sample width
-      setframerate(n) -- set the frame rate
-      setnframes(n)   -- set the number of frames
-      setcomptype(type, name)
-                      -- set the compression type and the
-                         human-readable compression type
-      setparams(tuple)
-                      -- set all parameters at once
-      tell()          -- return current position in output file
-      writeframesraw(data)
-                      -- write audio frames without pathing up the
-                         file header
-      writeframes(data)
-                      -- write audio frames and patch up the file header
-      close()         -- patch up the file header and close the
-                         output file
-You should set the parameters before the first writeframesraw or
-writeframes.  The total number of frames does not need to be set,
-but when it is set to the correct value, the header does not have to
-be patched up.
-It is best to first set all parameters, perhaps possibly the
-compression type, and then write audio frames using writeframesraw.
-When all frames have been written, either call writeframes('') or
-close() to patch up the sizes in the header.
-The close() method is called automatically when the class instance
-is destroyed.
+      setnchannels(n)          -- set the number of channels
+      setsampwidth(n)          -- set the sample width
+      setframerate(n)          -- set the frame rate
+      setnframes(n)            -- set the number of frames
+      setcomptype(type, name)  -- set the compression type and the human-readable compression type
+      setparams(tuple)         -- set all parameters at once
+      tell()                   -- return current position in output file
+      writeframesraw(data)     -- write audio frames without pathing up the file header
+      writeframes(data)        -- write audio frames and patch up the file header
+      close()                  -- patch up the file header and close the output file
+
+You should set the parameters before the first writeframesraw or writeframes.
+The total number of frames does not need to be set, but when it is set to the correct value, the header does not have to be patched up.
+It is best to first set all parameters, perhaps possibly the compression type, and then write audio frames using writeframesraw.
+When all frames have been written, either call writeframes('') or close() to patch up the sizes in the header.
+The close() method is called automatically when the class instance is destroyed.
 """
 
 try:
@@ -285,29 +268,29 @@ class Wave_read:
         self._compname = 'not compressed'
 
 class Wave_write:
-    """Variables used in this class:
+    """
+    Variables used in this class:
 
-    These variables are user settable through appropriate methods
-    of this class:
-    _file -- the open file with methods write(), close(), tell(), seek()
-              set through the __init__() method
-    _comptype -- the AIFF-C compression type ('NONE' in AIFF)
-              set through the setcomptype() or setparams() method
-    _compname -- the human-readable AIFF-C compression type
-              set through the setcomptype() or setparams() method
+    These variables are user settable through appropriate methods of this class:
+    _file      -- the open file with methods write(), close(), tell(), seek()
+                + set through the __init__() method
+    _comptype  -- the AIFF-C compression type ('NONE' in AIFF)
+                + set through the setcomptype() or setparams() method
+    _compname  -- the human-readable AIFF-C compression type
+                + set through the setcomptype() or setparams() method
     _nchannels -- the number of audio channels
-              set through the setnchannels() or setparams() method
+                + set through the setnchannels() or setparams() method
     _sampwidth -- the number of bytes per audio sample
-              set through the setsampwidth() or setparams() method
+                + set through the setsampwidth() or setparams() method
     _framerate -- the sampling frequency
-              set through the setframerate() or setparams() method
-    _nframes -- the number of audio frames written to the header
-              set through the setnframes() or setparams() method
+                + set through the setframerate() or setparams() method
+    _nframes   -- the number of audio frames written to the header
+                + set through the setnframes() or setparams() method
 
     These variables are used internally only:
-    _datalength -- the size of the audio samples written to the header
-    _nframeswritten -- the number of frames actually written
-    _datawritten -- the size of the audio samples actually written
+    _datalength      -- the size of the audio samples written to the header
+    _nframeswritten  -- the number of frames actually written
+    _datawritten     -- the size of the audio samples actually written
     """
 
     def __init__(self, f):
@@ -336,48 +319,47 @@ class Wave_write:
     def __del__(self):
         self.close()
 
-    #
     # User visible methods.
-    #
+
     def setnchannels(self, nchannels):
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         if nchannels < 1:
-            raise Error( 'bad # of channels')
+            raise Error( 'Bad number of channels')
         self._nchannels = nchannels
 
     def getnchannels(self):
         if not self._nchannels:
-            raise Error( 'number of channels not set')
+            raise Error( 'Number of channels not set')
         return self._nchannels
 
     def setsampwidth(self, sampwidth):
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         if sampwidth < 1 or sampwidth > 4:
-            raise Error( 'bad sample width')
+            raise Error( 'Bad sample width')
         self._sampwidth = sampwidth
 
     def getsampwidth(self):
         if not self._sampwidth:
-            raise Error( 'sample width not set')
+            raise Error( 'Sample width not set')
         return self._sampwidth
 
     def setframerate(self, framerate):
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         if framerate <= 0:
-            raise Error( 'bad frame rate')
+            raise Error( 'Bad frame rate')
         self._framerate = framerate
 
     def getframerate(self):
         if not self._framerate:
-            raise Error( 'frame rate not set')
+            raise Error( 'Frame rate not set')
         return self._framerate
 
     def setnframes(self, nframes):
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         self._nframes = nframes
 
     def getnframes(self):
@@ -385,9 +367,9 @@ class Wave_write:
 
     def setcomptype(self, comptype, compname):
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         if comptype not in ('NONE',):
-            raise Error( 'unsupported compression type')
+            raise Error( 'Unsupported compression type')
         self._comptype = comptype
         self._compname = compname
 
@@ -400,7 +382,7 @@ class Wave_write:
     def setparams(self, params):
         nchannels, sampwidth, framerate, nframes, comptype, compname = params
         if self._datawritten:
-            raise Error( 'cannot change parameters after starting to write')
+            raise Error( 'Cannot change parameters after starting to write')
         self.setnchannels(nchannels)
         self.setsampwidth(sampwidth)
         self.setframerate(framerate)
@@ -409,7 +391,7 @@ class Wave_write:
 
     def getparams(self):
         if not self._nchannels or not self._sampwidth or not self._framerate:
-            raise Error( 'not all parameters set')
+            raise Error( 'Not all parameters set')
         return self._nchannels, self._sampwidth, self._framerate, \
               self._nframes, self._comptype, self._compname
 
@@ -417,7 +399,7 @@ class Wave_write:
         raise Error( 'setmark() not supported')
 
     def getmark(self, id):
-        raise Error( 'no marks')
+        raise Error( 'No marks')
 
     def getmarkers(self):
         return None
@@ -464,11 +446,11 @@ class Wave_write:
     def _ensure_header_written(self, datasize):
         if not self._datawritten:
             if not self._nchannels:
-                raise Error( '# channels not specified')
+                raise Error( 'Number of channels not specified')
             if not self._sampwidth:
-                raise Error( 'sample width not specified')
+                raise Error( 'Sample width not specified')
             if not self._framerate:
-                raise Error( 'sampling rate not specified')
+                raise Error( 'Sampling rate not specified')
             self._write_header(datasize)
 
     def _write_header(self, initlength):
@@ -520,6 +502,6 @@ def open(f, mode=None):
     elif mode in ('w', 'wb'):
         return Wave_write(f)
     else:
-        raise Error( "mode must be 'r', 'rb', 'w', or 'wb'")
+        raise Error( "Mode must be 'r', 'rb', 'w', or 'wb'")
 
 openfp = open # B/W compatibility
