@@ -1,15 +1,23 @@
-import math
-import struct
-from itertools import count, islice, zip_longest
-from numpy import sign
+import logging as log
 
-import module._wav as wv
+import math
+from itertools import chain, count, islice, repeat
+
+from wavebender import write_wavefile
 
 ## useful maths
 
-def shelf(x, length, rate=1/3):
-  # note to self: change this to a proper bump function
-  return math.exp(x/(length*rate))
+def sign(x):
+  if x > 0:
+    return 1
+  elif x < 0:
+    return -1
+  else:
+    return 0
+
+def bump(x, length):
+  x = x / length
+  return 21.02*x - 149.55*x**2 + 433.75*x**3 - 622.64*x**4 + 437.84*x**5 - 120.42*x**6
 
 ## fool proofing
   ## functions that check if all attributes are inside their given range
@@ -17,65 +25,104 @@ def shelf(x, length, rate=1/3):
 def fool_amplitude(amplitude):
   return max(0, min(amplitude, 1))
 
+def safe_sum(iterable):
+  return min(1, max(-1,  sum(iterable)))
+
+## pan law
+
+def lAmp(balance):
+  return math.sqrt(2) * (math.cos(balance) + math.sin(balance)) / 2
+
+def rAmp(balance):
+  return math.sqrt(2) * (math.cos(balance) - math.sin(balance)) / 2
+
+## wave shapes
+
+def sine(x, period):
+  return math.sin(math.tau * period * x / 2)
+
+def square(x, period):
+  return sign(sine(x, period))
+
+def saw(x, period):
+  return (4 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
+
 ## base waves
 
-def sine_wave(frequency=440.0, amplitude=1/6, framerate=48000, skip_frame=0):
-  amplitude = fool_amplitude(amplitude)
-  for i in count(skip_frame):
-    yield float(amplitude) * math.sin(math.tau * float(frequency) * float(i) / float(framerate))
-   
-def square_wave(frequency=440.0, amplitude=1/6, framerate=48000, skip_frame=0):
-  amplitude = fool_amplitude(amplitude)
-  for i in count(skip_frame):
-    yield float(amplitude) * sign(math.sin(math.tau * float(frequency) * float(i) / float(framerate)))
+_framerate = 48000
+_wvshapes = {'sine':sine, 'square':square, 'saw':saw}
 
-def saw_wave(frequency=440.0, amplitude=1/6, framerate=48000, skip_frame=0):
-  amplitude = fool_amplitude(amplitude)
-  for i in count(skip_frame):
-    yield float(amplitude) * (-2 / math.pi) * math.atan(1/math.tan(math.pi * float(frequency) * float(i) / float(framerate)))
+class Wave():
+  def __init__(self, shape = 'sine', frequency = 432.0, amplitude = 0.12, offset = 0, balance = 0, framerate = _framerate):
+    self.shape = shape # if shape in _wvshapes.keys()
+    self.period = float(frequency) / float(framerate)
+    self.amplitude = fool_amplitude(amplitude)
+    self.offset = int(offset * framerate)
+    self.lAmp = lAmp(balance)
+    self.rAmp = rAmp(balance)
 
-## blips
+    self.framerate = framerate
+
+  def mono_generator(self, amp = 1):
+    for i in count():
+      yield amp * float(self.amplitude) * _wvshapes[self.shape](float(i), self.period)
+
+  def left_generator(self):
+    return self.mono_generator(amp=self.lAmp)
+
+  def right_generator(self):
+    return self.mono_generator(amp=self.rAmp)
+
+  def push(self, iterator):
+    return chain(repeat(0, self.offset), iterator, repeat(0))
+    
+  def left_signal(self):
+    return self.push(self.left_generator())
+
+  def right_signal(self):
+    return self.push(self.right_generator())
+
+class Blip(Wave):
   ## short chunks of sound of a given shape
   ## duration is counted in seconds for all shapes
+  
+  def __init__(self, duration = 1, **kwargs):
+    super().__init__(**kwargs)
+    self.duration = duration * self.framerate
 
-def blip(wave='sine', frequency=440.0, amplitude=1/6, framerate=48000, duration=1):
-  return islice(globals()[f'{wave}_wave'](frequency, amplitude, framerate), duration*framerate)
+  def mono_generator(self):
+    return islice(super().mono_generator(), self.duration)
 
-## plops
+class Plop(Blip):
   ## short decaying chunks of sound of a given shape
+  ## duration is counted in seconds for all shapes
 
-def plop(wave='sine', frequency=440.0, amplitude=1/6, framerate=48000, duration=1):
-  for i, s in zip(count, blip(wave, frequency, amplitue, framerate, duration)):
-    yield s * shelf(i, duration*framerate)
+  def mono_generator(self):
+    for i, s in zip(count(), super().mono_generator()):
+      yield s * bump(i, self.duration)
 
 ## wav creation
 
-def grouper(n, iterable, fillvalue=None):
-  # grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx
-  
-  args = [iter(iterable)] * n
-  return zip_longest(fillvalue=fillvalue, *args)
+### the following two functions should be combined into one, implementing the Wave class
+def compute_samples(channels, nsamples=None):
+    '''
+    create a generator which computes the samples.
+    essentially it creates a sequence of the sum of each function in the channel
+    at each sample in the file for each channel.
+    '''
 
-def sum_samples(waves, nsamples=None):
-  # create a generator which creates a sequence of the sum of each wave at each sample
-#  if len(waves)
-  return islice(map(sum, zip(*waves)), nsamples)
 
-def write_wavefile(f, samples, nframes=None, nchannels=1, sampwidth=4, framerate=48000, bufsize=2048):
-  # f is the filepath
-  # samples is an array of values for every sample
-  if nframes is None:
-    nframes = 0
-    
-  w = wv.open(f, 'wb')
-  w.setparams((nchannels, sampwidth, framerate, nframes, 'NONE', 'not compressed'))
-  
-  max_amplitude = float(int((2 ** (sampwidth * 8)) / 2) - 1)
-  
-  # split the samples into chunks (to reduce memory consumption and improve performance)
-  for chunk in grouper(bufsize, samples):
-    frames = b''.join(struct.pack('i', int(max_amplitude * sample)) for sample in chunk if sample is not None)
-    w.writeframesraw(frames)
-    
-  w.close()
+    return islice(zip(*(map(safe_sum, zip(*channel)) for channel in channels)), nsamples)
+
+def _samples(waves, duration = None, framerate = _framerate):
+  left_signal = [w.left_signal() for w in waves]
+  right_signal = [w.right_signal() for w in waves]
+  if duration is not None:
+    duration = duration * framerate
+  return compute_samples((left_signal, right_signal), duration)
+
+def write(fpath, waves, duration):
+  # fpath : path to write file to
+  # waves : waves
+  write_wavefile(fpath, samples=_samples(waves, duration), nchannels=2, sampwidth=2, framerate=_framerate, bufsize=2048)
   return
