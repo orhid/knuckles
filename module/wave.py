@@ -58,6 +58,8 @@ class Wave():
     self.period = float(frequency) / float(framerate)
     self.amplitude = fool_amplitude(amplitude)
     self.offset = int(offset * framerate)
+
+    # balance should be in [-math.tau/8 , math.tau/8]
     self.lAmp = lAmp(balance)
     self.rAmp = rAmp(balance)
 
@@ -82,6 +84,9 @@ class Wave():
   def right_signal(self):
     return self.push(self.right_generator())
 
+  def signal(self):
+    return (self.left_signal(), self.right_signal())
+
 class Blip(Wave):
   ## short chunks of sound of a given shape
   ## duration is counted in seconds for all shapes
@@ -90,15 +95,15 @@ class Blip(Wave):
     super().__init__(**kwargs)
     self.duration = duration * self.framerate
 
-  def mono_generator(self):
-    return islice(super().mono_generator(), self.duration)
+  def mono_generator(self, amp = 1):
+    return islice(super().mono_generator(amp), self.duration)
 
 class Plop(Blip):
   ## short decaying chunks of sound of a given shape
   ## duration is counted in seconds for all shapes
 
-  def mono_generator(self):
-    for i, s in zip(count(), super().mono_generator()):
+  def mono_generator(self, amp = 1):
+    for i, s in zip(count(), super().mono_generator(amp)):
       yield s * bump(i, self.duration)
 
 ## wav creation
@@ -110,16 +115,14 @@ def compute_samples(channels, nsamples=None):
     essentially it creates a sequence of the sum of each function in the channel
     at each sample in the file for each channel.
     '''
-
-
     return islice(zip(*(map(safe_sum, zip(*channel)) for channel in channels)), nsamples)
 
 def _samples(waves, duration = None, framerate = _framerate):
-  left_signal = [w.left_signal() for w in waves]
-  right_signal = [w.right_signal() for w in waves]
+  signal = (s for s in zip(*(w.signal() for w in waves)))
+  
   if duration is not None:
     duration = duration * framerate
-  return compute_samples((left_signal, right_signal), duration)
+  return compute_samples(signal, duration)
 
 def write(fpath, waves, duration):
   # fpath : path to write file to

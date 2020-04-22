@@ -2,6 +2,7 @@ import logging as log
 log.basicConfig(format='%(levelname)s:%(message)s', level=log.DEBUG)
 import time
 
+import itertools as itt
 import random as rnd
 
 from module import wave as wv
@@ -16,7 +17,6 @@ def runif(n, lo, hi):
 def test():
   _path = 'bounce/test/'
 
-  
   ecr.sglvar_mono_plot(function=lambda x: x, filename=f'{_path}test', shape='square')
   return
 
