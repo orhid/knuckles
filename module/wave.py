@@ -5,6 +5,8 @@ from itertools import chain, count, islice, repeat
 
 from wavebender import write_wavefile
 
+_framerate = 48000
+
 ## useful maths
 
 def sign(x):
@@ -20,13 +22,13 @@ def bump(x, length):
   return 21.02*x - 149.55*x**2 + 433.75*x**3 - 622.64*x**4 + 437.84*x**5 - 120.42*x**6
 
 ## fool proofing
-  ## functions that check if all attributes are inside their given range
+  ## functions that check if all atheartbutes are inside their given range
 
 def fool_amplitude(amplitude):
-  return max(0, min(amplitude, 1))
+  return min(1, max(-1, amplitude))
 
 def safe_sum(iterable):
-  return min(1, max(-1,  sum(iterable)))
+  return min(1, max(-1, sum(iterable)))
 
 ## pan law
 
@@ -41,29 +43,42 @@ def rAmp(balance):
 def sine(x, period):
   return math.sin(math.tau * period * x / 2)
 
-def square(x, period):
-  return sign(sine(x, period))
-
 def saw(x, period):
-  return (4 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
+  if period * _framerate < 3456:
+    return (4 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
+  else:
+    return sumsine(x, period, 1)
+
+def square(x, period):
+  if period * _framerate < 3456:
+    return sign(sine(x, period))
+  else:
+    return sumsine(x, period, 2)
+
+def heart(x, period):
+  return sumsine(x, period, 3)
+
+def funnel(x, period):
+  return sumsine(x, period, 4)
+
+def sumsine(x, period, mod):
+  n = math.floor(((20000 / (period * _framerate)) + 1) / mod) + 1
+  return 4 * mod * sum(math.pow(-1, k*mod) * math.sin(math.tau * period * x * (mod*k+1)) / (mod*k+1) for k in range(n)) / math.tau
 
 ## base waves
 
-_framerate = 48000
-_wvshapes = {'sine':sine, 'square':square, 'saw':saw}
+_wvshapes = {'sine':sine, 'square':square, 'saw':saw, 'heart':heart, 'funnel':funnel}
 
 class Wave():
-  def __init__(self, shape = 'sine', frequency = 432.0, amplitude = 0.12, offset = 0, balance = 0, framerate = _framerate):
+  def __init__(self, shape = 'sine', frequency = 432.0, amplitude = 0.12, offset = 0, balance = 0):
     self.shape = shape # if shape in _wvshapes.keys()
-    self.period = float(frequency) / float(framerate)
+    self.period = float(frequency) / float(_framerate)
     self.amplitude = fool_amplitude(amplitude)
     self.offset = int(offset * framerate)
 
     # balance should be in [-math.tau/8 , math.tau/8]
     self.lAmp = lAmp(balance)
     self.rAmp = rAmp(balance)
-
-    self.framerate = framerate
 
   def mono_generator(self, amp = 1):
     for i in count():
@@ -87,13 +102,30 @@ class Wave():
   def signal(self):
     return (self.left_signal(), self.right_signal())
 
+  ### modifiers
+
+  def flip_phase(self):
+    self.amplitude = -self.amplitude
+
+  def pan_left(self):
+    self.lAmp = 1
+    self.rAmp = 0
+
+  def pan_center(self):
+    self.lAmp = lAmp(0)
+    self.rAmp = rAmp(0)
+
+  def pan_right(self):
+    self.lAmp = 0
+    self.rAmp = 1
+
 class Blip(Wave):
   ## short chunks of sound of a given shape
   ## duration is counted in seconds for all shapes
   
   def __init__(self, duration = 1, **kwargs):
     super().__init__(**kwargs)
-    self.duration = duration * self.framerate
+    self.duration = duration * _framerate
 
   def mono_generator(self, amp = 1):
     return islice(super().mono_generator(amp), self.duration)
@@ -110,18 +142,18 @@ class Plop(Blip):
 
 ### the following two functions should be combined into one, implementing the Wave class
 def compute_samples(channels, nsamples=None):
-    '''
-    create a generator which computes the samples.
-    essentially it creates a sequence of the sum of each function in the channel
-    at each sample in the file for each channel.
-    '''
-    return islice(zip(*(map(safe_sum, zip(*channel)) for channel in channels)), nsamples)
+  '''
+  create a generator which computes the samples.
+  essentially it creates a sequence of the sum of each function in the channel
+  at each sample in the file for each channel.
+  '''
+  return islice(zip(*(map(safe_sum, zip(*channel)) for channel in channels)), nsamples)
 
-def _samples(waves, duration = None, framerate = _framerate):
+def _samples(waves, duration = None):
   signal = (s for s in zip(*(w.signal() for w in waves)))
   
   if duration is not None:
-    duration = duration * framerate
+    duration = int(duration * _framerate)
   return compute_samples(signal, duration)
 
 def write(fpath, waves, duration):
