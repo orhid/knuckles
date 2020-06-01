@@ -17,7 +17,7 @@ def sign(x):
   else:
     return 0
 
-def bump(x, length):
+def bump(x, length = 1):
   x = x / length
   return 21.02*x - 149.55*x**2 + 433.75*x**3 - 622.64*x**4 + 437.84*x**5 - 120.42*x**6
 
@@ -45,7 +45,7 @@ def sine(x, period):
 
 def saw(x, period):
   if period * _framerate < 3456:
-    return (4 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
+    return (8 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
   else:
     return sumsine(x, period, 1)
 

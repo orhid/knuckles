@@ -210,6 +210,7 @@ def bivar_space_ns():
 
 def bivar_space_ns_blnc():
   # project R^2 onto a circle, unwind with frequency, preserve distance with balance
+  pass
 
 ## trivar
 
