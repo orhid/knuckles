@@ -1,12 +1,12 @@
 import logging as log
-
 import math
 from itertools import tee
-from module import wave as wv
+
+from . import wave as wv
 
 # utility
 _lofrq = 144
-_time_range = (0, 11)
+_time_range = (0, 12)
 _balance_range = (-math.tau/8, math.tau/8)
 _frequency_range = (_lofrq, math.pow(2,6)*_lofrq)
 _amplitude_range = (0.54, 0)
@@ -54,12 +54,19 @@ def crt_plr(xs, ys):
   ys = list(ys)
 
   if len(xs) != len(ys):
-    pass # should throw exception
+    raise IndexError(f'Provided datasets are of differing lengths, which may result in unexpected bahaviour.')
 
   rs, ts = tee((math.sqrt(x*x + y*y), math.atan2(y,x)) for x,y in zip(xs, ys))
   return (r[0] for r in rs), (t[1] for t in ts)
-  
+ 
+def test_len(*args):
+  if len({arg['size'] for arg in args}) > 1:
+    raise IndexError(f'Provided datasets are of differing lengths, which may result in unexpected bahaviour.')
+
 # processing
+def process_data(value):
+  value = list(value)
+  return {'value':(v for v in value), 'size':len(value)}
 
 def process_amplitude(value, bounds = None):
   value = list(value) # for safety
@@ -79,6 +86,14 @@ def process_balance(value, bounds = None):
   codemesne = _balance_range
   return {'value':(-linear_map(v, demesne, codemesne) for v in value), 'size':len(value)}
 
+def process_balance_space(value, bounds = None, midpoint = None):
+  value = list(value) # for safety
+  demesne = assign_bounds(value, bounds = None)
+  if midpoint is None:
+    midpoint = (demesne[0] + demesne[1])/2
+  codemesne = _balance_range
+  return {'value':(-arctan_midmap(v, demesne, midpoint, codemesne) for v in value), 'size':len(value)}
+
 def process_time(value, bounds = None):
   value = list(value) # for safety
   demesne = assign_bounds(value, bounds)
@@ -91,79 +106,92 @@ def manufacture_time(size, step = 0.5):
 # additive synthesis
 ## nulvar
 
-def nulvar_sq_time(value, value_bounds = None, shape = 'sine', filename = 'nulvar_sq_time', write = True):
+def nulvar_sq_time(value, value_bounds = None, frequency = 432, balance = 0, shape = 'sine', filename = 'nulvar_sq_time', write = True):
   # maps the values onto time panning everything in the middle, with constant frequency
   time = process_time(value, value_bounds)
   
-  waves = (wv.Plop(offset=t, shape=shape) for t in time['value'])
+  waves = (wv.Plop(offset=t, frequency=frequency, balance=balance, shape=shape) for t in time['value'])
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
+    sonif.render()
+  return sonif
 
-def nulvar_sq_freq(value, value_bounds = None, shape = 'sine', filename = 'nulvar_sq_freq', write = True):
+def nulvar_sq_freq(value, value_bounds = None, balance = 0, shape = 'sine', filename = 'nulvar_sq_freq', write = True):
   # maps the values onto frequency panning everything in the middle, spaces evenly in time
   frequency = process_frequency(value, value_bounds)
   time = manufacture_time(frequency['size'])
   
-  waves = (wv.Plop(frequency=f, offset=t, shape=shape) for f,t in zip(frequency['value'], time['value']))
+  waves = (wv.Plop(frequency=f, offset=t, balance=balance, shape=shape) for f,t in zip(frequency['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
+    sonif.render()
+  return sonif
 
-def nulvar_sq_blnc(value, value_bounds = None, shape = 'sine', filename = 'nulvar_sq_blnc', write = True):
+def nulvar_sq_blnc(value, value_bounds = None, frequency = 432, shape = 'sine', filename = 'nulvar_sq_blnc', write = True):
   # maps the values onto balance with constant frequency, spaces evenly in time
   balance = process_balance(value, value_bounds)
   time = manufacture_time(balance['size'])
   
-  waves = (wv.Plop(balance=b, offset=t, shape=shape) for b,t in zip(balance['value'], time['value']))
+  waves = (wv.Plop(balance=b, offset=t, frequency=frequency, shape=shape) for b,t in zip(balance['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
+    sonif.render()
+  return sonif
 
-def nulvar_ns(value, value_bounds = None, duration = 3, amplitude = 0.02, shape = 'sine', filename = 'nulvar_ns', write = True):
+def nulvar_ns(value, value_bounds = None, duration = 3, amplitude = 0.02, balance=0, shape = 'sine', filename = 'nulvar_ns', write = True):
   # maps the arguments onto frequency panning everything in the middle, playing them at the same time
-
   frequency = process_frequency(value, value_bounds)
 
-  waves = (wv.Wave(frequency=f, shape=shape, amplitude=amplitude) for f in frequency['value'])
+  waves = (wv.Wave(frequency=f, balance=balance, shape=shape, amplitude=amplitude) for f in frequency['value'])
+  sonif = wv.Sonification(waves, duration, filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=duration)
-  return waves
+    sonif.render()
+  return sonif
 
 ## univar
 
-def univar_sq_time_freq(time, value, time_bounds = None, value_bounds = None, shape = 'sine', filename = 'univar_sq_freq', write = True):
+def univar_sq_time_freq(time, value, time_bounds = None, value_bounds = None, balance = 0, shape = 'sine', filename = 'univar_sq_freq', write = True):
   # maps the arguments onto time and values onto frequency panning everything in the middle
-
   time = process_time(time, time_bounds)
   frequency = process_frequency(value, value_bounds)
-
-  if time['size'] != frequency['size']:
-    pass # should throw exception
   
-  waves = (wv.Plop(frequency=f, offset=t, shape=shape) for f,t in zip(frequency['value'], time['value']))
+  test_len(time, frequency)
+  
+  waves = (wv.Plop(frequency=f, offset=t, balance=balance, shape=shape) for f,t in zip(frequency['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
+    sonif.render()
+  return sonif
 
 def univar_sq_blnc_freq(space, value, space_bounds = None, value_bounds = None, shape = 'sine', filename = 'univar_sq_blnc', write = True):
   # maps the arguments onto balance and values onto frequency, spacing values equally in time
 
   balance = process_balance(space, space_bounds)
   frequency = process_frequency(value, value_bounds)
-  
-  if balance['size'] != frequency['size']:
-    pass # should throw exception
+ 
+  test_len(balance, frequency)
   
   time = manufacture_time(balance['size'])
 
   waves = (wv.Plop(frequency=f, balance=b, offset=t, shape=shape) for f,b,t in zip(frequency['value'], balance['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
+    sonif.render()
+  return sonif
 
-def univar_sq_time_blnc():
-  pass
+def univar_sq_time_blnc(time, space, time_bounds = None, space_bounds = None, frequency = 432, shape = 'sine', filename = 'univar_sq_blnc', write = True):
+  # maps the arguments onto time and values onto balance
+  
+  time = process_time(time, time_bounds)
+  balance = process_balance(space, space_bounds)
+
+  test_len(time, balance)
+  
+  waves = (wv.Plop(balance=b, offset=t, frequency=frequency, shape=shape) for b,t in zip(balance['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
+  if write:
+    sonif.render()
+  return sonif
 
 def univar_ns(space, value, space_bounds = None, value_bounds = None, duration = 3, amplitude = 0.02, shape = 'sine', filename = 'univar_ns', write = True):
   # maps the arguments onto frequency and balance, playing them at the same time
@@ -171,13 +199,41 @@ def univar_ns(space, value, space_bounds = None, value_bounds = None, duration =
   balance = process_balance(space, space_bounds)
   frequency = process_frequency(value, value_bounds)
 
-  if balance['size'] != frequency['size']:
-    pass # should throw exception
+  test_len(balance, frequency)
 
   waves = (wv.Wave(frequency=f, balance=b, shape=shape, amplitude=amplitude) for f,b in zip(frequency['value'],balance['value']))
+  sonif = wv.Sonification(waves, duration, filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=duration)
-  return waves
+    sonif.render()
+  return sonif
+
+def univar_space_ns(xarg, yarg, duration = 3, amplitude = 0.02, shape = 'sine', filename = 'univar_space_ns', write = True):
+  # project R^2 onto a circle, unwind with frequency, preserve distance with loudness
+  ampli, frequency = crt_plr(xarg, yarg)
+  ampli = process_loudness(ampli)
+  frequency = process_frequency(frequency, (-math.tau/2, math.tau/2))
+
+  test_len(ampli, frequency)
+
+  waves = (wv.Wave(frequency=f, shape=shape, amplitude=amplitude*a) for f,a in zip(frequency['value'], ampli['value']))
+  sonif = wv.Sonification(waves, duration, filename)
+  if write:
+    sonif.render()
+  return sonif
+
+def univar_space_ns_blnc(xarg, yarg, duration = 3, amplitude = 0.02, shape = 'sine', filename = 'univar_space_ns_blnc', write = True):
+  # project R^2 onto a circle, unwind with frequency, preserve distance with balance
+  balance, frequency = crt_plr(xarg, yarg)
+  balance = process_balance_space(balance)
+  frequency = process_frequency(frequency, (-math.tau/2, math.tau/2))
+
+  test_len(balance, frequency)
+
+  waves = (wv.Wave(frequency=f, balance=b, shape=shape, amplitude=amplitude) for f,b in zip(frequency['value'], balance['value']))
+  sonif = wv.Sonification(waves, duration, filename)
+  if write:
+    sonif.render()
+  return sonif
 
 ## bivar
 
@@ -188,104 +244,191 @@ def bivar_sq(time, space, value, time_bounds = None, space_bounds = None, value_
   balance = process_balance(space, space_bounds)
   frequency = process_frequency(value, value_bounds)
 
-  if time['size'] != balance['size'] != frequency['size']:
-    pass # should throw exception
+  test_len(time, balance, frequency)
   
   waves = (wv.Plop(frequency=f, balance=b, offset=t, shape=shape) for f,b,t in zip(frequency['value'], balance['value'], time['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=time['endpoint'])
-  return waves
-  pass
+    sonif.render()
+  return sonif
 
-def bivar_space_sq_freq():
+def bivar_space_sq_freq(xarg, yarg, value, value_bounds = None, shape = 'sine', filename = 'bivar_space_sq_freq', write = True):
   # project R^2 onto a circle, unwind with balance, preserve distance with loudness, space evenly in time
-  pass
+  ampli, balance = crt_plr(xarg, yarg)
+  ampli = process_amplitude(ampli)
+  balace = process_balance(balance, (-math.tau/2, math.tau/2))
+  frequency = process_frequency(value, value_bounds)
 
-def bivar_space_sq_time():
-  pass
+  test_len(ampli, balance, frequency)
 
-def bivar_space_ns():
-  # project R^2 onto a circle, unwind with frequency, preserve distance with loudness
-  pass
+  time = manufacture_time(ampli['size'])
+  waves = (wv.Plop(frequency=f, balance=b, offset=t, apmlitude=a, shape=shape) for f,b,t,a in zip(frequency['value'], balance['value'], time['value'], ampli['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
+  if write:
+    sonif.render()
+  return sonif
 
-def bivar_space_ns_blnc():
-  # project R^2 onto a circle, unwind with frequency, preserve distance with balance
-  pass
+def bivar_space_sq_time(xarg, yarg, time, time_bounds = None, shape = 'sine', filename = 'bivar_space_sq_time', write = True):
+  # project R^2 onto a circle, unwind with balance, preserve distance with loudness
+  ampli, balance = crt_plr(xarg, yarg)
+  ampli = process_amplitude(ampli)
+  balace = process_balance(balance, (-math.tau/2, math.tau/2))
+  time = process_time(time, time_bounds)
+
+  test_len(ampli, balance, time)
+
+  waves = (wv.Plop(balance=b, offset=t, apmlitude=a, shape=shape) for b,t,a in zip(balance['value'], time['value'], ampli['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
+  if write:
+    sonif.render()
+  return sonif
+
+def bivar_space_ns(xarg, yarg, space, space_bounds = None, duration = 3, amplitude = 0.02, shape = 'sine', filename = 'bivar_space_ns', write = True):
+  # project R^2 onto a circle, unwind with frequency, preserve distance with loudnes, map third argument onto balance
+  ampli, frequency = crt_plr(xarg, yarg)
+  ampli = process_loudness(ampli)
+  frequency = process_frequency(frequency, (-math.tau/2, math.tau/2))
+  balance = process_balance(space, space_bounds)
+  
+  test_len(ampli, balance, frequency)
+
+  waves = (wv.Wave(frequency=f, balance=b, shape=shape, amplitude=amplitude*a) for f,b,a in zip(frequency['value'], balance['value'], ampli['value']))
+  sonif = wv.Sonification(waves, duration, filename)
+  if write:
+    sonif.render()
+  return sonif
 
 ## trivar
 
-def trivar_space_sq():
+def trivar_space_sq(xarg, yarg, time, value, time_bounds = None, value_bounds = None, shape = 'sine', filename = 'trivar_space_sq', write = True):
   # project R^2 onto a circle, unwind with balance, preserve distance with loudness, map third argument onto time
-  pass
+  ampli, balance = crt_plr(xarg, yarg)
+  ampli = process_amplitude(ampli)
+  balace = process_balance(balance, (-math.tau/2, math.tau/2))
+  time = process_time(time, time_bounds)
+  frequency = process_frequency(value, value_bounds)
 
-def trivar_space_ns():
-  # project R^2 onto a circle, unwind with frequency, preserve distance with loudnes, map third argument onto balances
-  pass
+  test_len(ampli, balance, time, frequency)
 
-# continuous functions
-
-def univar_sq_freq_plot(function, demesne = (-1,1), resolution = 12, value_bounds = None, shape = 'sine', filename = 'univar_sq_freq_plot'):
-  argument = list(partition(resolution, demesne))
-  value = (function(x) for x in argument)
-  univar_sq_freq(time=argument, value=value, time_bounds=demesne, value_bounds=value_bounds, shape=shape, filename=filename)
-  return
-
-def univar_sq_blnc_plot(function, demesne = (-1,1), resolution = 12, value_bounds = None, shape = 'sine', filename = 'univar_sq_blnc_plot'):
-  argument = list(partition(resolution, demesne))
-  value = (function(x) for x in argument)
-  univar_sq_blnc(space=argument, value=value, space_bounds=demesne, value_bounds=value_bounds, shape=shape, filename=filename)
-  return
-
-def univar_plot():
-  pass
-
-def bivar_plot():
-  pass
-
-def trivar_plot():
-  pass
+  waves = (wv.Plop(frequency=f, balance=b, offset=t, apmlitude=a, shape=shape) for f,b,t,a in zip(frequency['value'], balance['value'], time['value'], ampli['value']))
+  sonif = wv.Sonification(waves, time['endpoint'], filename)
+  if write:
+    sonif.render()
+  return sonif
 
 # compare datasets
 ## nulvar
 
 def cmp_freq_nulvar_sq_time(datasets, bounds = None, shape = 'sine', frequency_range = _frequency_range, filename = 'cmp_freq_nulvar_sq_time', write = True):
-  data = [process_time(t, b) for t,b in zip(datasets, bounds)]
-
-  # throw exception if datasets have differing sizes
-  frequency = list(partition(data[0]['size']), frequency_range)
-  waves = (wv.Wave(frequency=f, offset=t, shape=shape) for f,d in zip(frequency, data) for t in d['value'])
-  if write:
-    wv.write(fpath=f'{filename}.wav', waves=waves, duration=data[0]['endpoint'])
-  return waves
-
-def cmp_blnc_nulvar_sq_time():
-  pass
-
-def cmp_freqblnc_nulvar_sq_time():
-  pass
-
-def cmp_nulvar_sq_freq():
-  # compare by balance
-  pass
-
-def cmp_nulvar_sq_blnc():
   # compare by frequency
-  pass
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  frequency = list(partition(len(datasets)-1, frequency_range))
+  
+  sonif = wv.soni_sum(nulvar_sq_time(data['value'], bounds, frequency=f, shape=shape, write=False) for data,f in zip(datasets,frequency))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
 
-def cmp_nulvar_ns():
+def cmp_blnc_nulvar_sq_time(datasets, bounds = None, shape = 'sine', balance_range = _balance_range, filename = 'cmp_blnc_nulvar_sq_time', write = True):
   # compare by balance
-  pass
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  balance = list(partition(len(datasets)-1, balance_range))
+  log.debug(balance)
+
+  sonif = wv.soni_sum(nulvar_sq_time(data['value'], bounds, balance=b, shape=shape, write=False) for data,b in zip(datasets,balance))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
+
+def cmp_freqblnc_nulvar_sq_time(datasets, bounds = None, shape = 'sine', balance_range = _balance_range, frequency_range = _frequency_range, filename = 'cmp_freqblnc_nulvar_sq_time', write = True):
+  # compare by balance and frequency
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  balance = list(partition(len(datasets)-1, balance_range))
+  frequency = list(partition(len(datasets)-1, frequency_range))
+  
+  sonif = wv.soni_sum(nulvar_sq_time(data['value'], bounds, frequency=f, balance=b, shape=shape, write=False) for data,f,b in zip(datasets,frequency,balance))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
+
+def cmp_nulvar_sq_freq(datasets, bounds = None, shape = 'sine', balance_range = _balance_range, filename = 'cmp_nulvar_sq_freq', write = True):
+  # compare by balance
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  balance = list(partition(len(datasets)-1, balance_range))
+  
+  sonif = wv.soni_sum(nulvar_sq_freq(data['value'], bounds, balance=b, shape=shape, write=False) for data,b in zip(datasets,balance))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
+
+def cmp_nulvar_sq_blnc(datasets, bounds = None, shape = 'sine', frequency_range = _frequency_range, filename = 'cmp_nulvar_sq_blnc', write = True):
+  # compare by frequency
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  frequency = list(partition(len(datasets)-1, frequency_range))
+  
+  sonif = wv.soni_sum(nulvar_sq_blnc(data['value'], bounds, frequency=f, shape=shape, write=False) for data,f in zip(datasets,frequency))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
+
+def cmp_nulvar_ns(datasets, bounds = None, duration = 3, amplitude = 0.02, balance_range = _balance_range, filename = 'cmp_nulvar_ns', write = True):
+  # compare by balance
+  datasets = [process_data(data) for data in datasets]
+  test_len(*datasets)
+  balance = list(partition(len(datasets)-1, balance_range))
+  
+  sonif = wv.soni_sum(nulvar_ns(data['value'], bounds, balance=b, duration=duration, amplitude=amplitude, write=False) for data,b in zip(datasets,balance))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
 
 ## univar
 
-def cmp_univar_sq_freq():
+def cmp_univar_sq_freq(time_datasets, value_datasets, time_bounds = None, value_bounds = None, shape = 'sine', balance_range = _balance_range, filename = 'cmp_univar_sq_freq', write = True):
   # compare by balance
-  pass
+  time = [process_data(data) for data in time_datasets]
+  frequency = [process_data(data) for data in value_datasets]
+  test_len(*time)
+  test_len(*frequency)
+  balance = list(partition(len(time)-1, balance_range))
+  
+  sonif = wv.soni_sum(univar_sq_time_freq(t['value'], f['value'], time_bounds, value_bounds, balance=b, shape=shape, write=False) for t,f,b in zip(time, frequency, balance))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
 
-def cmp_univar_sq_blnc():
+def cmp_univar_sq_blnc(time_datasets, space_datasets, time_bounds = None, space_bounds = None, shape = 'sine', frequency_range = _frequency_range, filename = 'cmp_univar_sq_blnc', write = True):
   # compare by frequency
-  pass
+  time = [process_data(data) for data in time_datasets]
+  balance = [process_data(data) for data in space_datasets]
+  test_len(*time)
+  test_len(*balance)
+  frequency = list(partition(len(time)-1, frequency_range))
+  
+  sonif = wv.soni_sum(univar_sq_time_blnc(t['value'], b['value'], time_bounds, value_bounds, frequency=f, shape=shape, write=False) for t,b,f in zip(time, balance, frequency))
+  sonif.filename = filename
+  if write:
+    sonif.render()
+  return sonif
 
 # difference
 
-## take two datasets, sonify them using the same method !and the same bounds! then flip the phase of one and add them together
+def diff(sonif1, sonif2, filename = 'diff', write = True):
+  # take two wave sequences, flip the phase of one and add them together
+  sonif2.flip_phase()
+  sonif = sonif1 + sonif2
+  if write:
+    sonif.render()
+  return sonif

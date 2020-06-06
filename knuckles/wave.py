@@ -1,6 +1,6 @@
-import logging as log
-
 import math
+import operator
+from functools import reduce
 from itertools import chain, count, islice, repeat
 
 from wavebender import write_wavefile
@@ -19,7 +19,7 @@ def sign(x):
 
 def bump(x, length = 1):
   x = x / length
-  return 21.02*x - 149.55*x**2 + 433.75*x**3 - 622.64*x**4 + 437.84*x**5 - 120.42*x**6
+  return 14.806*x - 72.471*x**2 + 135.61*x**3 - 112.46*x**4 + 34.517*x**5
 
 ## fool proofing
   ## functions that check if all atheartbutes are inside their given range
@@ -30,6 +30,8 @@ def fool_amplitude(amplitude):
 def safe_sum(iterable):
   return min(1, max(-1, sum(iterable)))
 
+def soni_sum(sonifs):
+  return reduce(operator.add, sonifs)
 ## pan law
 
 def lAmp(balance):
@@ -41,11 +43,11 @@ def rAmp(balance):
 ## wave shapes
 
 def sine(x, period):
-  return math.sin(math.tau * period * x / 2)
+  return math.sin(math.tau * period * x)
 
 def saw(x, period):
   if period * _framerate < 3456:
-    return (8 / math.tau) * math.atan(math.tan(x * math.tau *  period / 4))
+    return (8 / math.tau) * math.atan(math.tan(x * math.tau *  period / 2))
   else:
     return sumsine(x, period, 1)
 
@@ -74,7 +76,7 @@ class Wave():
     self.shape = shape # if shape in _wvshapes.keys()
     self.period = float(frequency) / float(_framerate)
     self.amplitude = fool_amplitude(amplitude)
-    self.offset = int(offset * framerate)
+    self.offset = int(offset * _framerate)
 
     # balance should be in [-math.tau/8 , math.tau/8]
     self.lAmp = lAmp(balance)
@@ -106,26 +108,15 @@ class Wave():
 
   def flip_phase(self):
     self.amplitude = -self.amplitude
-
-  def pan_left(self):
-    self.lAmp = 1
-    self.rAmp = 0
-
-  def pan_center(self):
-    self.lAmp = lAmp(0)
-    self.rAmp = rAmp(0)
-
-  def pan_right(self):
-    self.lAmp = 0
-    self.rAmp = 1
+    return self
 
 class Blip(Wave):
   ## short chunks of sound of a given shape
   ## duration is counted in seconds for all shapes
   
-  def __init__(self, duration = 1, **kwargs):
+  def __init__(self, duration = 0.7, **kwargs):
     super().__init__(**kwargs)
-    self.duration = duration * _framerate
+    self.duration = int(duration * _framerate)
 
   def mono_generator(self, amp = 1):
     return islice(super().mono_generator(amp), self.duration)
@@ -138,6 +129,24 @@ class Plop(Blip):
     for i, s in zip(count(), super().mono_generator(amp)):
       yield s * bump(i, self.duration)
 
+class Sonification():
+  ## collection of waves ready to be sonified
+
+  def __init__(self, waves, duration, filename = 'sonification'):
+    self.waves = waves
+    self.duration = duration
+    self.filename = filename
+
+  def __add__(self, other):
+    return Sonification(chain(self.waves, other.waves), max(self.duration, other.duration))
+
+  def render(self, filename = None):
+    if filename is not None:
+      self.filename = filename
+    write(fpath=f'{self.filename}.wav', waves=self.waves, duration=self.duration)
+
+  def flip_phase(self):
+    self.waves = (w.flip_phase() for w in self.waves)
 ## wav creation
 
 ### the following two functions should be combined into one, implementing the Wave class
