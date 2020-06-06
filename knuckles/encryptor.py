@@ -304,13 +304,13 @@ def trivar_space_sq(xarg, yarg, time, value, time_bounds = None, value_bounds = 
   # project R^2 onto a circle, unwind with balance, preserve distance with loudness, map third argument onto time
   ampli, balance = crt_plr(xarg, yarg)
   ampli = process_amplitude(ampli)
-  balace = process_balance(balance, (-math.tau/2, math.tau/2))
+  balance = process_balance(balance, (-math.tau/2, math.tau/2))
   time = process_time(time, time_bounds)
   frequency = process_frequency(value, value_bounds)
 
   test_len(ampli, balance, time, frequency)
 
-  waves = (wv.Plop(frequency=f, balance=b, offset=t, apmlitude=a, shape=shape) for f,b,t,a in zip(frequency['value'], balance['value'], time['value'], ampli['value']))
+  waves = (wv.Plop(frequency=f, balance=b, offset=t, amplitude=a, shape=shape) for f,b,t,a in zip(frequency['value'], balance['value'], time['value'], ampli['value']))
   sonif = wv.Sonification(waves, time['endpoint'], filename)
   if write:
     sonif.render()
